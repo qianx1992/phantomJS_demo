@@ -1,0 +1,82 @@
+**优点**: 实现简单
+
+**缺点**: 对于高度太高的页面会导致文件过大，处理会有问题，我测试的最大图片尺寸是12.8M。
+
+
+if (system.args.length < 3 || system.args.length > 5) {
+    console.log('Usage: rasterize.js URL filename [paperwidth*paperheight|paperformat] [zoom]');
+    console.log('  paper (pdf output) examples: "5in*7.5in", "10cm*20cm", "A4", "Letter"');
+    console.log('  image (png/jpg output) examples: "1920px" entire page, window width 1920px');
+    console.log('                                   "800px*600px" window, clipped to 800x600');
+    phantom.exit(1);
+}
+************************************************************************
+viewportSize属性指定浏览器视口的大小，即网页加载的初始浏览器窗口大小。
+************************************************************************
+如何滚动到页面底部？
+
+部分页面使用了lazyload，比如图片或js的延迟加载，只有滚动到底部才会触发，因此对于这种页面，如果要展示完整的页面，则需设法使底部可见，主要有3个办法：
+
+　　1、使浏览器足够大，这样底部就显示了，可以设置viewPortSize很大：page.viewportSize = {width: 4800,height: 8000};
+
+　　2、通过BOM方法操作滚动条，可以把滚动条滚动到一个很大的值，如：window.scrollTo(0,10000);也可以滚动到适应的高度：window.document.body.scrollTop = document.body.scrollHeight;
+************************************************************************
+注意page.evaluate中的回调函数作用域链
+page.evaluate中的函数是在目标网页执行的，其上下文、作用域链已经不能与phantomjs执行这个js同日而语，因此请勿在evaluate中引用phantomjs的api或你这个js文件中的全局变量，否则出了错，都很难定位。
+错误示例：
+[javascript] view plain copy
+var page = require('webpage').create();
+var url = 'http://json2form.wikisoft.me//';
+var globalVar = 1;
+page.open(url, function (status)
+{
+    if (status != "success")
+    {
+        console.log('FAIL to load the address');
+    }
+
+    page.evaluate(function()
+    {
+        var x = globalVar;//引用本js的一个全局变量
+        page.method();//执行phantomjs的一个api
+    });
+});
+正确引用全局变量的方法是把全局变量进行传参
+[javascript] view plain copy
+var express = require('express');
+var router = express.Router();
+var mysql = require('mysql');
+var phantom = require('phantom');
+/* GET home page. */
+router.get('/', function (req, res, next) {
+    var pageContent,
+        paraObj = {title: 'lalala3', content: 'notenote3'};
+
+    phantom.create().then(function (ph) {
+        ph.createPage().then(function (page) {
+            page.open('http://www.baidu.com/').then(function (status) {
+                page.evaluate(function (_paraObj) {
+                    var desObj = {};
+                    desObj.title = _paraObj.title;
+                    desObj.note = _paraObj.content;
+                    return desObj;
+                }, paraObj).then(function (_desObj) {
+                    //console.log(html);
+                    res.render('index', {title: _desObj.title, content: _desObj.note});
+                    page.close();
+                    ph.exit();
+                });
+            });
+        });
+    });
+
+});
+
+module.exports = router;
+
+************************************************************************
+page.viewportSize = { width: 600, height: 600 };这个是默认的高度，也就是600X600，我建议大家把height设置小一点，我这边设置的是width:800，height:200。因为实际上，在不同时设置高度与亮度的情况下，
+如果真实的网页的高度大于设置值时，图片会自动扩充高宽度的，直到整个页面显示完（当你想截取小的图片时，可能由于默认设置的太大，会使图片有很大一块空的）。
+
+
+关于 PhantomJS 和 Selenium IDE for Firefox 停止维护并没有找到相关的公告，但这两个项目的确已经都超过 2 年没有发布新版本了。
